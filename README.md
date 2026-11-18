@@ -1,4 +1,3 @@
-
 <div align="center">
 
 <img src="./assets/hands.gif" alt="Two hands reaching toward each other" width="880">
@@ -9,14 +8,18 @@
 
 <br>
 
+<div align="center">
+
 <picture>
   <source
     media="(prefers-color-scheme: dark)"
-    srcset="./profile-3d-contrib/profile-gitblock-dark.svg"
+    srcset="./profile-halftone/halftone-dark.svg"
   >
   <img
-    src="./profile-3d-contrib/profile-gitblock.svg"
+    src="./profile-halftone/halftone-light.svg"
     width="100%"
-    alt="3D GitHub Contribution Graph"
+    alt="Halftone GitHub contribution graph: each dot is a day, larger dots mean more contributions"
   >
 </picture>
+
+</div>
