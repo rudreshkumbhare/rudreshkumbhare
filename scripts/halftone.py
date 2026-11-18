@@ -1,6 +1,7 @@
 """Generate a halftone-style GitHub contribution graph (light + dark SVGs).
 
 Each day is a dot; the dot grows with the number of contributions.
+Styled to match the pixel banner: black panel, cream ink, amber highlight.
 Uses only the Python standard library.
 """
 import json
@@ -8,27 +9,24 @@ import math
 import os
 import urllib.request
 
-USER = os.environ.get("USERNAME") or os.environ["GITHUB_REPOSITORY_OWNER"]
-TOKEN = os.environ["GITHUB_TOKEN"]
+USER = os.environ.get("USERNAME") or os.environ.get("GITHUB_REPOSITORY_OWNER", "")
+TOKEN = os.environ.get("GITHUB_TOKEN", "")
 OUT_DIR = "profile-halftone"
 
-# Palette pulled from hands.gif. Tweak freely.
+# Same black panel in both modes so it matches the banner above it.
+# The dark variant only adds a hairline border so it separates from GitHub's dark page.
 THEMES = {
-    "light": {
-        "panel": "#d9d5cf",   # concrete
-        "empty": "#bdb9b3",
-        "dot": "#1c1512",     # ink
-        "accent": "#8a5a44",  # deep skin shadow
-        "text": "#5b5650",
-    },
-    "dark": {
-        "panel": "#1c1512",
-        "empty": "#332a25",
-        "dot": "#bdb9b3",
-        "accent": "#c79a82",  # skin
-        "text": "#8f877f",
-    },
+    "light": {"panel": "#070707", "stroke": "none", "dither": 0.30},
+    "dark": {"panel": "#070707", "stroke": "#2b2b2b", "dither": 0.22},
 }
+
+CREAM = "#ece6d6"
+AMBER = "#f2a93b"
+MUTED = "#8a8578"
+EMPTY = "#ece6d6"
+
+FONT = "ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
+MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 
 QUERY = """
 query($login: String!) {
@@ -61,49 +59,121 @@ def fetch():
     return data["data"]["user"]["contributionsCollection"]["contributionCalendar"]
 
 
+def dot_radius(ratio, r_min, r_max):
+    return r_min + (r_max - r_min) * math.sqrt(ratio)
+
+
 def render(calendar, theme):
     weeks = calendar["weeks"]
     total = calendar["totalContributions"]
+
     counts = [d["contributionCount"] for w in weeks for d in w["contributionDays"]]
     nonzero = sorted(c for c in counts if c > 0)
-    # Cap at the 95th percentile so one huge day doesn't flatten everything else
-    cap = nonzero[int(len(nonzero) * 0.95) - 1] if nonzero else 1
+    cap = nonzero[max(int(len(nonzero) * 0.95) - 1, 0)] if nonzero else 1
     cap = max(cap, 1)
 
-    cell, pad, caption_h = 16, 24, 26
-    width = pad * 2 + len(weeks) * cell
-    height = pad * 2 + 7 * cell + caption_h
-    r_min, r_max = 1.6, cell / 2 - 0.6
+    W, pad, gutter = 880, 36, 30
+    cell = (W - pad * 2 - gutter) / len(weeks)
+    r_min, r_max = 2.2, cell / 2 - 0.4
 
-    parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
-        f'width="{width}" height="{height}" role="img" '
-        f'aria-label="{total} contributions in the last year">',
-        f'<rect width="{width}" height="{height}" rx="10" fill="{theme["panel"]}"/>',
+    strip_h = 12
+    title_y = strip_h + 40
+    month_y = title_y + 34
+    grid_y = month_y + 14
+    grid_bottom = grid_y + 7 * cell
+    legend_y = grid_bottom + 26
+    H = round(legend_y + 22)
+    gx = pad + gutter
+
+    p = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" '
+        f'role="img" aria-label="{total} contributions in the last year">',
+        f'<rect width="{W}" height="{H}" fill="{theme["panel"]}"/>',
     ]
+    if theme["stroke"] != "none":
+        p.append(
+            f'<rect x="0.5" y="0.5" width="{W - 1}" height="{H - 1}" fill="none" '
+            f'stroke="{theme["stroke"]}"/>'
+        )
 
+    # Dither strip along the top, echoing the banner
+    sq = 6
+    for row in range(2):
+        for i in range(W // sq + 1):
+            if (i + row) % 2 == 0:
+                p.append(
+                    f'<rect x="{i * sq}" y="{row * sq}" width="{sq}" height="{sq}" '
+                    f'fill="{CREAM}" opacity="{theme["dither"]}"/>'
+                )
+
+    # Header
+    p.append(
+        f'<text x="{pad}" y="{title_y}" font-family="{FONT}" font-size="16" '
+        f'letter-spacing="3" fill="{CREAM}">CONTRIBUTIONS</text>'
+    )
+    p.append(
+        f'<text x="{W - pad}" y="{title_y}" text-anchor="end" font-family="{FONT}" '
+        f'font-size="13" letter-spacing="2" fill="{AMBER}">{total} IN THE LAST YEAR</text>'
+    )
+
+    # Month labels
+    last_month, last_x = None, -999
+    for wi, week in enumerate(weeks):
+        month = int(week["contributionDays"][0]["date"][5:7]) - 1
+        if month != last_month:
+            x = gx + wi * cell
+            if x - last_x >= 34:
+                p.append(
+                    f'<text x="{x:.1f}" y="{month_y}" font-family="{FONT}" font-size="9" '
+                    f'letter-spacing="1.5" fill="{MUTED}">{MONTHS[month]}</text>'
+                )
+                last_x = x
+            last_month = month
+
+    # Day labels
+    for weekday, label in ((1, "MON"), (3, "WED"), (5, "FRI")):
+        cy = grid_y + weekday * cell + cell / 2 + 3
+        p.append(
+            f'<text x="{pad}" y="{cy:.1f}" font-family="{FONT}" font-size="8" '
+            f'letter-spacing="1" fill="{MUTED}">{label}</text>'
+        )
+
+    # Dots
     for wi, week in enumerate(weeks):
         for day in week["contributionDays"]:
             c = day["contributionCount"]
-            cx = pad + wi * cell + cell / 2
-            cy = pad + day["weekday"] * cell + cell / 2
+            cx = gx + wi * cell + cell / 2
+            cy = grid_y + day["weekday"] * cell + cell / 2
             if c == 0:
-                parts.append(f'<circle cx="{cx}" cy="{cy}" r="1" fill="{theme["empty"]}"/>')
+                p.append(
+                    f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="1.1" fill="{EMPTY}" opacity="0.22"/>'
+                )
                 continue
             ratio = min(c, cap) / cap
-            r = r_min + (r_max - r_min) * math.sqrt(ratio)
-            color = theme["accent"] if ratio >= 0.75 else theme["dot"]
-            parts.append(
-                f'<circle cx="{cx}" cy="{cy}" r="{r:.2f}" fill="{color}">'
-                f'<title>{day["date"]}: {c}</title></circle>'
+            color = AMBER if ratio >= 0.7 else CREAM
+            p.append(
+                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{dot_radius(ratio, r_min, r_max):.2f}" '
+                f'fill="{color}"><title>{day["date"]}: {c}</title></circle>'
             )
 
-    parts.append(
-        f'<text x="{pad}" y="{height - 12}" font-family="ui-monospace, Menlo, Consolas, monospace" '
-        f'font-size="11" fill="{theme["text"]}">{total} contributions in the last year</text>'
+    # Legend
+    lx = W - pad
+    p.append(
+        f'<text x="{lx}" y="{legend_y + 3}" text-anchor="end" font-family="{FONT}" '
+        f'font-size="9" letter-spacing="1.5" fill="{MUTED}">MORE</text>'
     )
-    parts.append("</svg>")
-    return "\n".join(parts)
+    x = lx - 54
+    for ratio, color in ((1.0, AMBER), (0.7, AMBER), (0.35, CREAM), (0.1, CREAM)):
+        r = dot_radius(ratio, r_min, r_max)
+        p.append(f'<circle cx="{x:.1f}" cy="{legend_y}" r="{r:.2f}" fill="{color}"/>')
+        x -= r_max * 2 + 4
+    p.append(
+        f'<text x="{x - 2:.1f}" y="{legend_y + 3}" text-anchor="end" font-family="{FONT}" '
+        f'font-size="9" letter-spacing="1.5" fill="{MUTED}">LESS</text>'
+    )
+
+    p.append("</svg>")
+    return "\n".join(p)
 
 
 def main():
