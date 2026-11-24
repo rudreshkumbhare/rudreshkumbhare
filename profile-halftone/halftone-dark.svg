@@ -530,6 +530,8 @@
 <circle cx="822.0" cy="180.7" r="1.1" fill="#ece6d6" opacity="0.22"/>
 <circle cx="822.0" cy="195.4" r="1.1" fill="#ece6d6" opacity="0.22"/>
 <circle cx="836.7" cy="107.3" r="1.1" fill="#ece6d6" opacity="0.22"/>
+<circle cx="836.7" cy="122.0" r="1.1" fill="#ece6d6" opacity="0.22"/>
+<circle cx="836.7" cy="136.7" r="1.1" fill="#ece6d6" opacity="0.22"/>
 <text x="844" y="231.75471698113208" text-anchor="end" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="9" letter-spacing="1.5" fill="#8a8578">MORE</text>
 <circle cx="790.0" cy="228.75471698113208" r="6.94" fill="#f2a93b"/>
 <circle cx="772.1" cy="228.75471698113208" r="6.17" fill="#f2a93b"/>
